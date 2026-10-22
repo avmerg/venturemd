@@ -1,0 +1,839 @@
+<title>VentureMD</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one-column phone game. Trail HUD on top, one deal card at a time, decisions pinned under the card. */
+:root{
+  --bg:#E8EBE3; --surface:#F8F9F4; --ink:#17212A; --muted:#5A676C; --line:#C8CFC2;
+  --trail:#B4521C; --trail-soft:#F1DCCB; --go:#1C6C66; --go-soft:#D3E8E4; --stop:#A5312C; --stop-soft:#F2D6D3; --gold:#A97E0C;
+  --f-display:"Silkscreen", "Courier New", monospace;
+  --f-body:"Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-data:"IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11171B; --surface:#1A2227; --ink:#E3E7DF; --muted:#94A09E; --line:#2C393E;
+  --trail:#E2793C; --trail-soft:#3A2619; --go:#52B4A9; --go-soft:#173331; --stop:#E2635B; --stop-soft:#3A1E1C; --gold:#E0B53F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11171B; --surface:#1A2227; --ink:#E3E7DF; --muted:#94A09E; --line:#2C393E;
+  --trail:#E2793C; --trail-soft:#3A2619; --go:#52B4A9; --go-soft:#173331; --stop:#E2635B; --stop-soft:#3A1E1C; --gold:#E0B53F; color-scheme:dark}
+
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+*{box-sizing:border-box}
+.app{max-width:440px;margin:0 auto;padding-block:14px 28px;display:flex;flex-direction:column;gap:12px}
+h1,h2,h3{font-family:var(--f-display);font-weight:400;text-wrap:balance;margin:0;letter-spacing:.02em}
+p{margin:0}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,.tile:focus-visible{outline:3px solid var(--trail);outline-offset:2px}
+.num{font-family:var(--f-data);font-variant-numeric:tabular-nums}
+.eyebrow{font-family:var(--f-display);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--trail)}
+.muted{color:var(--muted)}
+
+/* HUD */
+.hud{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.stat{display:flex;flex-direction:column;gap:3px;min-width:0}
+.stat b{font-family:var(--f-data);font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.stat span{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar{height:6px;background:var(--line);border-radius:1px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--go)}
+.bar i.low{background:var(--stop)}
+
+/* Trail */
+.trail{position:relative;padding:2px 0 0}
+.jc{display:block;width:100%;height:auto;max-width:100%;overflow:visible}
+.jc-done{transition:stroke-dashoffset .6s ease-out}
+.track{height:4px;background:repeating-linear-gradient(90deg,var(--line) 0 6px,transparent 6px 10px)}
+.track i{display:block;height:4px;background:var(--trail);transition:width .5s}
+.unused-wagon{position:absolute;top:0;width:34px;transform:translateX(-50%);transition:left .5s}
+.stops{display:flex;justify-content:space-between;margin-top:6px;font-family:var(--f-display);font-size:9px;color:var(--muted)}
+.stops .here{color:var(--trail)}
+
+/* Cards */
+.card{background:var(--surface);border:2px solid var(--ink);box-shadow:4px 4px 0 var(--ink);padding:18px 16px;display:flex;flex-direction:column;gap:12px}
+.deal{position:relative;touch-action:none;user-select:none;transition:transform .25s}
+.deal.dragging{transition:none}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pill{font-family:var(--f-data);font-size:11px;padding:2px 7px;border:1px solid var(--line);color:var(--muted)}
+.pill.hot{border-color:var(--trail);color:var(--trail)}
+.deal h2{font-size:22px}
+.pitch{font-size:16px}
+.terms{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;margin:0;border-block:1px solid var(--line);padding-block:8px}
+.terms div{min-width:0}
+.terms dt{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.terms dd{margin:0;font-family:var(--f-data);font-weight:600;font-variant-numeric:tabular-nums}
+.signals{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.signals li{display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px}
+.signals .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding-top:2px}
+.dd-head{display:flex;justify-content:space-between;align-items:baseline}
+.locked{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px dashed var(--line);padding:8px 10px}
+.locked .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.reveal{border-left:3px solid var(--trail);padding:4px 10px;background:var(--trail-soft)}
+.reveal .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--trail);display:block}
+.btn-sm{border:1px solid var(--ink);background:transparent;padding:5px 9px;font-size:13px;white-space:nowrap}
+.btn-sm:disabled{opacity:.4;cursor:not-allowed}
+.note{font-size:13px;color:var(--trail)}
+.stamp{position:absolute;top:18px;right:14px;font-family:var(--f-display);font-size:22px;padding:2px 8px;border:3px solid;transform:rotate(8deg);opacity:0;pointer-events:none}
+
+.actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.act{border:2px solid var(--ink);padding:10px 4px;display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--surface);box-shadow:3px 3px 0 var(--ink)}
+.act:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.act strong{font-family:var(--f-display);font-weight:400;font-size:13px}
+.act small{font-family:var(--f-data);font-size:12px;color:var(--muted)}
+.act.pass strong{color:var(--stop)} .act.inv strong{color:var(--go)} .act.all strong{color:var(--trail)}
+.act:disabled{opacity:.35;cursor:not-allowed}
+.hint{text-align:center;font-size:12px;color:var(--muted)}
+
+.primary{border:2px solid var(--ink);background:var(--ink);color:var(--surface);padding:12px 16px;font-family:var(--f-display);font-size:14px;box-shadow:3px 3px 0 var(--trail);width:100%}
+.primary:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--trail)}
+.secondary{border:2px solid var(--ink);background:transparent;padding:10px 14px;font-family:var(--f-display);font-size:13px;width:100%}
+
+.choice{display:flex;flex-direction:column;gap:10px}
+.opt{text-align:left;border:2px solid var(--line);background:var(--surface);padding:12px;display:flex;flex-direction:column;gap:4px}
+.opt[aria-pressed="true"]{border-color:var(--trail);box-shadow:3px 3px 0 var(--trail)}
+.opt strong{font-family:var(--f-display);font-weight:400;font-size:14px}
+.opt .row{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.opt small{font-family:var(--f-data);color:var(--trail)}
+label.field{display:flex;flex-direction:column;gap:4px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+input[type=text]{font:inherit;font-size:16px;padding:10px;border:2px solid var(--ink);background:var(--surface);color:var(--ink);text-transform:none;letter-spacing:0}
+
+.title-art{display:flex;flex-direction:column;gap:14px;padding-top:8px}
+.title-art h1{font-size:44px;line-height:1;color:var(--ink)}
+.title-art h1 em{font-style:normal;color:var(--trail)}
+.rules{display:flex;flex-direction:column;gap:6px;margin:0;padding-left:18px}
+
+.outcome{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.mult{font-family:var(--f-display);font-size:30px}
+.mult.win{color:var(--go)} .mult.loss{color:var(--stop)} .mult.mid{color:var(--gold)}
+.pm{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:10px}
+.pm p b{font-weight:700}
+.effects{font-family:var(--f-data);font-size:13px;color:var(--muted)}
+
+.tiles{display:grid;grid-template-columns:1fr;gap:8px}
+.tile{border:2px solid var(--line);background:var(--surface);padding:10px 12px;text-align:left;font-size:14px}
+.tile[aria-pressed="true"]{border-color:var(--go);background:var(--go-soft)}
+.timer{font-family:var(--f-display);font-size:26px;color:var(--trail)}
+
+.ledger{display:flex;flex-direction:column}
+.ledger .r{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);align-items:baseline}
+.ledger .r small{display:block;color:var(--muted);font-size:12px}
+.ledger .r .num{text-align:right}
+.big{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.big div{display:flex;flex-direction:column;gap:2px}
+.big b{font-family:var(--f-display);font-size:22px;font-weight:400}
+.big span{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.tomb{border:2px solid var(--ink);border-radius:90px 90px 0 0;padding:28px 18px 18px;text-align:center;display:flex;flex-direction:column;gap:6px;background:var(--surface)}
+.tomb h3{font-size:16px}
+.tomb p{font-family:var(--f-display);font-size:12px;line-height:1.6}
+.rating{font-family:var(--f-display);font-size:20px;color:var(--trail)}
+.copyfb{font-size:12px;color:var(--go);text-align:center;min-height:1em}
+.big{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:12px}
+.term{text-decoration:underline dotted var(--trail);text-decoration-thickness:1.5px;text-underline-offset:3px;cursor:help;border-radius:2px}
+.term:hover,.term[aria-expanded="true"]{background:var(--trail-soft)}
+.term:focus-visible{outline:2px solid var(--trail);outline-offset:1px}
+#tip{position:fixed;z-index:50;max-width:min(300px,calc(100vw - 24px));background:var(--ink);color:var(--surface);padding:10px 12px;font-size:13px;line-height:1.45;box-shadow:3px 3px 0 var(--trail);pointer-events:none}
+#tip b{display:block;font-family:var(--f-display);font-weight:400;font-size:12px;letter-spacing:.04em;margin-bottom:3px;color:var(--trail-soft)}
+#tip .ex{display:block;margin-top:5px;font-family:var(--f-data);font-size:12px;opacity:.85}
+details.math{border-top:1px solid var(--line);padding-top:10px}
+details.math summary{cursor:pointer;font-family:var(--f-display);font-size:12px;color:var(--trail)}
+details.math .ledger{margin-top:8px}
+.inspired{font-size:12px;color:var(--muted);border-top:1px dashed var(--line);padding-top:6px;font-style:italic}
+.glossary-hint{font-size:12px;color:var(--muted)}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+@keyframes rise{from{transform:translateY(8px)}to{transform:none}}
+.enter{animation:rise .25s ease-out}
+</style>
+
+<div class="app" id="app"></div>
+
+<script>
+// ---------- Outcome model ----------
+// Each deal has a hidden quality q. q sets the odds of six outcome tiers.
+// The multiple for each tier depends on stage: later rounds pay more often but cap lower.
+const TIERS=[
+ {label:"Wipeout",line:"shut down. The assets sold for parts."},
+ {label:"Fire sale",line:"sold in a fire sale to a competitor."},
+ {label:"Modest exit",line:"was acquired at a modest premium."},
+ {label:"Solid exit",line:"was bought by a strategic acquirer at a solid multiple."},
+ {label:"Big win",line:"went public and kept climbing."},
+ {label:"Fund returner",line:"became the category leader."}
+];
+const LAD={"Seed":[0,.5,2,5,15,40],"Series A":[0,.5,1.5,4,10,25],"Series B":[0,.6,1.5,3,6,12],"Series C":[0,.7,1.2,2.5,4,8]};
+const HOLD=[3,4,5,6,7,8];            // years from check to exit, by tier: lemons ripen early, winners take longer
+const FEES=[0,20,20,20,20,20,10,10,10,10,10]; // $M per year: 2% of $1B for 5 years, then 1%. $150M total.
+const CARRY=.2, INVESTABLE=850;
+const mult=d=>LAD[d.stage][d.tier];
+function weights(q){return [.5+2.2*(1-q)**2,.5*(1-q)+.15,.35+.5*q,.1+.7*q,.02+.6*q**3,.002+.2*q**4]}
+function roll(q){const w=weights(q);let s=w.reduce((a,b)=>a+b),r=Math.random()*s;for(let i=0;i<w.length;i++){r-=w[i];if(r<=0)return i}return 0}
+
+// ---------- Deals (24; each run deals 12) ----------
+const DEALS=[
+ {name:"Scribeline",inspired:"Loosely inspired by ambient AI scribes like Abridge and Microsoft's Nuance DAX. Private companies; the story is still unfolding.",sector:"Ambient AI",stage:"Seed",check:15,post:60,q:.85,
+  pitch:"An ambient AI scribe that listens to the visit and drafts the note before the patient leaves the room.",
+  signals:[["Buyer","CMIO at a 14-hospital system is the internal champion"],["Regulatory","Non-device clinical software; no FDA clearance needed"],["Usage","71% of pilot physicians use it daily after 8 weeks"],["Market","Six other scribe startups launched this year"]],
+  hidden:[["clinical","Note quality","Physician-audited error rate of 1.1%, below human scribes"],["team","Founders","CEO is a practicing cardiologist; CTO built speech models at a big tech lab"]],
+  key:"Daily active use by physicians",herring:"Six competitors launched this year",killer:"competition",
+  lesson:"Workflow pain, no FDA path and daily use means adoption can outrun any sales team. Pilot count is vanity; daily active clinicians is the metric."},
+ {name:"Theraluxe",inspired:"Inspired by Theranos: dissolved in 2018; founder convicted of fraud in 2022.",sector:"Diagnostics",stage:"Series A",check:40,post:900,q:.05,hot:true,
+  pitch:"Hundreds of lab tests from a single drop of blood, run on a proprietary box inside retail pharmacies.",
+  signals:[["Board","Two former cabinet secretaries and a retired general"],["Partners","LOI with a national pharmacy chain"],["Evidence","No peer-reviewed publications; data shared only under NDA"],["Price","$900M post-money at Series A"]],
+  hidden:[["clinical","Validation","Most validation runs used modified third-party analyzers"],["team","Founders","Founder has no lab medicine training; lab director turned over 3 times"]],
+  key:"No peer-reviewed validation",herring:"A famous board",killer:"fraud",
+  lesson:"Famous board members are not evidence. When a diagnostics company won't publish its data, the missing data is the answer."},
+ {name:"CareCompass",inspired:"Composite of employer care navigation startups. Not based on one company.",sector:"Navigation",stage:"Seed",check:15,post:30,q:.15,
+  pitch:"A benefits navigation app that helps employees find in-network care and cut claims costs.",
+  signals:[["Buyer","Sold to HR benefits leaders on 3-year contracts"],["Market","14 funded competitors with similar features"],["Usage","6% of eligible employees used it last quarter"],["Founder","Ex-management consultant with a polished deck"]],
+  hidden:[["commercial","Renewals","30% of employers churned at first renewal"],["team","Founders","Solo founder, no healthcare operating background"]],
+  key:"6% engagement",herring:"The founder's pedigree",killer:"churn",
+  lesson:"Navigation sold to HR lives or dies on engagement. Low usage means no savings data, and no savings data means no renewal."},
+ {name:"Kinetiq Robotics",inspired:"Composite. Robotic and autonomous ultrasound is an active research and startup area.",sector:"Physical AI",stage:"Series A",check:40,post:160,q:.62,
+  pitch:"A robotic arm that performs routine abdominal ultrasounds on its own, supervised remotely by a sonographer.",
+  signals:[["Regulatory","510(k) path with a clear predicate device"],["Demand","Sonographer vacancy rates above 15% at target systems"],["Traction","Paid pilots at 2 imaging centers"],["Model","Hardware plus a per-scan software fee"]],
+  hidden:[["clinical","Study","400-patient study: image quality non-inferior to human sonographers"],["commercial","Margins","Hardware gross margin 38%, improving with volume"]],
+  key:"Sonographer shortage plus a clear predicate",herring:"Only 2 pilots",killer:"hardware margins",
+  lesson:"Physical AI wins where labor is scarce and the regulatory path is known. Pilot count matters less than whether the robot fills a role buyers can't hire for."},
+ {name:"Pillar DTx",inspired:"Inspired by Pear Therapeutics: FDA-authorized for substance use disorder; bankrupt in 2023.",sector:"Digital therapeutics",stage:"Series B",check:70,post:450,q:.18,
+  pitch:"An FDA-authorized prescription app for substance use disorder, prescribed by clinicians like a drug.",
+  signals:[["Regulatory","FDA De Novo authorization in hand"],["Evidence","Randomized controlled trial showing improved abstinence"],["Payment","No dedicated CPT code; payers cover case by case"],["Financials","$4M revenue against $110M annual burn"]],
+  hidden:[["commercial","Fill rate","Only 28% of written prescriptions get filled and activated"],["team","Go-to-market","Building a 200-person pharma-style sales force"]],
+  key:"No reimbursement pathway",herring:"FDA authorization",killer:"reimbursement",
+  lesson:"FDA authorization is permission to sell, not a way to get paid. Without a billing code, every prescription is a fight with a payer."},
+ {name:"Hearthbox Health",inspired:"Inspired by Hims & Hers: public via SPAC in 2021.",sector:"Consumer telehealth",stage:"Series A",check:40,post:200,q:.7,hot:true,
+  pitch:"Cash-pay telehealth subscriptions for hair loss and sexual health, shipped in a box.",
+  signals:[["Payment","Cash pay, no insurance dependency"],["Unit econ","CAC payback in 4 months"],["Retention","70% of subscribers still active at month 6"],["Risk","Some products rely on compounded medications"]],
+  hidden:[["commercial","Channels","75% of new customers come from paid social"],["team","Founders","CEO previously scaled a direct-to-consumer razor brand"]],
+  key:"Cash pay with a 4-month payback",herring:"It doesn't feel like serious healthcare",killer:"channel dependence",
+  lesson:"When patients pay with their own card, unit economics are visible from day one. Payback and retention matter more than whether the category feels serious."},
+ {name:"Halo Sepsis",inspired:"Inspired by a 2021 external validation of Epic's sepsis model, which found an AUC of 0.63. That was an EHR vendor's model, not a startup's.",sector:"Clinical AI",stage:"Series B",check:70,post:380,q:.12,
+  pitch:"An AI model that predicts sepsis six hours before onset, running inside the hospital EHR.",
+  signals:[["Evidence","AUC of 0.92 on a retrospective dataset"],["Buyer","Strong interest from chief medical officers"],["Competition","The dominant EHR vendor ships a free built-in sepsis model"],["Validation","No prospective study yet"]],
+  hidden:[["clinical","Prospective","External prospective validation came in at AUC 0.63"],["commercial","Alerts","Nurses dismiss 85% of alerts in pilot units"]],
+  key:"No prospective validation",herring:"0.92 retrospective AUC",killer:"alert fatigue",
+  lesson:"Retrospective AUC is a lab result, not a product. Ask for prospective external validation and alert acceptance rates before you believe a model."},
+ {name:"Medivolt",inspired:"Loosely inspired by hospital service robots like Diligent Robotics' Moxi. Private; outcome still open.",sector:"Physical AI",stage:"Seed",check:15,post:45,q:.66,
+  pitch:"A hospital service robot that fetches supplies, meds and lab samples so nurses stay at the bedside.",
+  signals:[["Problem","Nurses spend up to a third of each shift fetching and walking"],["Traction","4 of 5 paid pilots converted to contracts"],["Pricing","Robot-as-a-service monthly subscription"],["Risk","Each deployment takes months of hospital mapping"]],
+  hidden:[["team","Founders","Robotics PhD founders plus a former ICU nurse co-founder"],["commercial","Deployment","Deployment time cut from 9 to 4 months on the last two sites"]],
+  key:"Pilot-to-contract conversion",herring:"Slow deployments",killer:"deployment drag",
+  lesson:"Pilot conversion is the truest signal in hospital sales. Four of five converting means buyers found budget, which is the hardest part."},
+ {name:"Babylonix",inspired:"Inspired by Babylon Health: public via SPAC in 2021; collapsed in 2023.",sector:"Value-based care",stage:"Series C",check:100,post:2400,q:.07,hot:true,
+  pitch:"AI-first primary care taking full financial risk for Medicare Advantage members across 3 states.",
+  signals:[["Growth","$300M revenue, growing 3x year over year"],["Economics","Medical loss ratio of 112%"],["Product","Claims its chatbot triages better than doctors"],["Exit","Plans to go public via SPAC next year"]],
+  hidden:[["commercial","Per member","Loses roughly $400 per member per year at current pricing"],["clinical","Triage","Chatbot claims were never independently validated"]],
+  key:"112% medical loss ratio",herring:"3x revenue growth",killer:"medical loss ratio",
+  lesson:"Under capitation, revenue is premium you collect to pay claims. A loss ratio above 100% means every new member digs the hole deeper."},
+ {name:"Endura Dialysis",inspired:"Inspired by Outset Medical's Tablo: IPO in 2020; shares fell sharply after a 2023 FDA warning letter and slowing sales.",sector:"Medical devices",stage:"Series A",check:40,post:180,q:.35,
+  pitch:"A compact home hemodialysis machine that patients can learn to run in an afternoon.",
+  signals:[["Regulatory","510(k) cleared for home use"],["Policy","CMS payment incentives push dialysis into the home"],["Usability","Patient training time cut from weeks to hours"],["Capital","Manufacturing scale-up needs significant capital"]],
+  hidden:[["clinical","Regulatory","FDA has raised concerns about how the device is being marketed"],["commercial","Demand","Clinics are buying fewer machines than forecast; inventory is piling up"]],
+  key:"Hardware sales that depend on a forecast",herring:"A CMS policy tailwind",killer:"slowing sales",
+  lesson:"A tailwind and a great product can still go sideways. Capital-heavy device companies live on hitting sales forecasts, and one regulatory letter can stall a sales cycle that was already slow."},
+ {name:"Olivo AI",inspired:"Inspired by Olive AI: raised nearly $900M; shut down in 2023.",sector:"Revenue cycle",stage:"Series B",check:70,post:1100,q:.17,
+  pitch:"An AI workforce that automates hospital billing, claims and prior authorizations.",
+  signals:[["Logos","Deployed at 900 hospitals"],["Retention","Net revenue retention of 85%"],["Product","Most automations are scripted bots clicking legacy screens"],["Funding","$800M raised to date"]],
+  hidden:[["commercial","Implementation","Average implementation runs 14 months over plan"],["team","Leadership","Three CFOs in two years"]],
+  key:"85% net revenue retention",herring:"900 hospital logos",killer:"churn",
+  lesson:"Logos show what you sold; net revenue retention shows whether it worked. Below 100% in enterprise software means customers are quietly leaving."},
+ {name:"Corvid Imaging",inspired:"Inspired by Viz.ai: FDA De Novo in 2018; the first AI software to win a Medicare new-technology add-on payment. Private.",sector:"Clinical AI",stage:"Series A",check:40,post:220,q:.82,hot:true,
+  pitch:"AI that spots large-vessel strokes on CT and pages the whole stroke team within minutes.",
+  signals:[["Regulatory","FDA De Novo clearance"],["Payment","Granted a Medicare new-technology add-on payment"],["Workflow","Coordinates neurology, radiology and transfer teams in one app"],["Market","Five other stroke AI vendors"]],
+  hidden:[["clinical","Outcomes","Time to treatment cut by 50 minutes in multicenter data"],["team","Founders","Co-founded by a vascular neurosurgeon"]],
+  key:"Separate Medicare payment",herring:"Five competitors",killer:"competition",
+  lesson:"Clinical AI that gets paid separately and owns the care-team workflow builds a moat that detection accuracy alone never will."},
+ {name:"Guardline Dx",inspired:"Inspired by Exact Sciences' Cologuard: Medicare coverage in 2014; USPSTF screening guidelines in 2016.",sector:"Diagnostics",stage:"Series B",check:70,post:500,q:.8,
+  pitch:"An at-home stool DNA test for colorectal cancer screening, ordered by primary care doctors.",
+  signals:[["Guidelines","Included in USPSTF colorectal screening guidelines"],["Payment","Medicare national coverage decision in hand"],["Evidence","92% cancer sensitivity in a 10,000-patient prospective study"],["Cost","Building a 300-person sales force to reach primary care"]],
+  hidden:[["commercial","Repeat","Patients rescreen every 3 years, so revenue recurs"],["clinical","Specificity","False positives run higher than colonoscopy, which GI doctors will criticize"]],
+  key:"Guideline inclusion plus Medicare coverage",herring:"An expensive sales force",killer:"sales costs",
+  lesson:"In diagnostics the moat is coverage. Guideline inclusion means most insurers must pay, so a big sales force is an investment rather than a burn problem."},
+ {name:"Arrowood Patch",inspired:"Inspired by iRhythm's Zio patch: public since 2016; hit by a 2021 Medicare contractor rate cut that was later largely reversed.",sector:"Remote monitoring",stage:"Series A",check:40,post:150,q:.75,
+  pitch:"A 14-day wearable ECG patch that replaces the bulky 24-hour Holter monitor.",
+  signals:[["Payment","Billed under existing cardiac monitoring CPT codes"],["Evidence","Finds 2x more arrhythmias than a 24-hour Holter, head to head"],["Regulatory","510(k) cleared"],["Ops","Every patch is read by in-house technicians, which adds headcount"]],
+  hidden:[["commercial","Rate risk","Its Medicare rate is set by one regional contractor and could be cut"],["clinical","Adherence","94% of patients wear it the full 14 days"]],
+  key:"Existing CPT codes plus better diagnostic yield",herring:"Labor-heavy reading",killer:"a Medicare rate cut",
+  lesson:"A device that fits codes doctors already bill gets adopted on day one. Watch who sets the rate: one Medicare contractor can reprice the business overnight."},
+ {name:"Inroad Behavioral",inspired:"Loosely inspired by therapist network marketplaces like Headway and Alma. Private; outcome still open.",sector:"Mental health",stage:"Seed",check:15,post:50,q:.72,
+  pitch:"Gets independent therapists into insurance networks and handles their billing for a cut of each visit.",
+  signals:[["Supply","Therapist sign-ups growing 25% month over month"],["Buyer","Insurers need behavioral health supply to meet network adequacy rules"],["Model","Free to therapists up front; takes a share of each insured visit"],["Market","Many therapists refuse insurance because billing is painful"]],
+  hidden:[["commercial","Contracts","Signed rate agreements with 4 large commercial insurers"],["team","Founders","Co-founder ran provider network operations at a national insurer"]],
+  key:"Fast supply growth that insurers need",herring:"A thin take rate per visit",killer:"insurer rate cuts",
+  lesson:"Marketplaces win when they unlock a supply side buyers are required to have. A thin take rate is fine when volume compounds."},
+ {name:"Sentry Room",inspired:"Composite of virtual sitting and computer vision fall prevention companies.",sector:"Physical AI",stage:"Series A",check:40,post:140,q:.68,
+  pitch:"In-room cameras and computer vision that watch for patient falls, so one remote tech can cover 12 patients instead of a 1:1 sitter.",
+  signals:[["ROI","Replaces bedside sitters hospitals pay by the hour"],["Buyer","Paid by the CNO from the nursing labor budget"],["Traction","Live in 6 hospitals; 3 expanded to more units"],["Risk","Patients and staff worry about cameras in rooms"]],
+  hidden:[["clinical","Outcomes","Falls dropped 40% on monitored units"],["commercial","Expansion","Average contract value tripled in year two"]],
+  key:"Labor savings in this year's budget",herring:"Privacy worries",killer:"a privacy backlash",
+  lesson:"Physical AI sells fastest when it replaces a labor line the buyer already pays for. Savings inside the same budget beat a promise of better outcomes."},
+ {name:"Coverly Rx",inspired:"Inspired by CoverMyMeds: acquired by McKesson in 2017 for about $1.1B.",sector:"Pharma services",stage:"Series B",check:70,post:600,q:.8,
+  pitch:"Automates prior authorization for prescriptions inside the EHR. Free for doctors, paid for by drug makers.",
+  signals:[["Payer","Drug makers pay per approved prescription"],["Network","Used by 600,000 prescribers, growing by word of mouth"],["Integration","Embedded in the top 3 EHRs"],["Optics","Skeptics say free-to-doctors can't last"]],
+  hidden:[["commercial","Economics","Gross margin above 80%, and customers keep expanding"],["team","Leadership","CEO previously ran a pharmacy benefit software company"]],
+  key:"The party with the most to gain pays",herring:"Free for doctors",killer:"pharma budget cuts",
+  lesson:"Find who profits when the friction disappears and charge them. Drug makers lose sales to stalled prior authorizations, so they pay to fix it."},
+ {name:"Lumen Ortho",inspired:"Composite. Loosely echoes Mako Surgical (acquired by Stryker in 2013) and the shift of joint replacement to surgery centers.",sector:"Physical AI",stage:"Series A",check:40,post:250,q:.65,
+  pitch:"A surgical robot for knee and hip replacement, sized and priced for outpatient surgery centers.",
+  signals:[["Regulatory","510(k) cleared with a clear predicate"],["Model","Sells single-use instruments on every procedure"],["Shift","Joint replacements are moving from hospitals to surgery centers"],["Risk","Two medtech giants already sell orthopedic robots"]],
+  hidden:[["clinical","Surgeons","Surgeons are proficient in under 10 cases"],["commercial","Pricing","Robot priced at a third of the incumbents"]],
+  key:"Per-case revenue riding a site-of-care shift",herring:"Incumbent robots",killer:"incumbent bundling",
+  lesson:"Incumbents built for hospitals don't own the new site of care. A robot priced for surgery centers, with revenue on every case, can win where the giants are over-built."},
+ {name:"Strideworks",inspired:"Inspired by exoskeleton makers like ReWalk and Ekso. Medicare began paying for personal exoskeletons in 2024.",sector:"Physical AI",stage:"Series B",check:70,post:420,q:.14,
+  pitch:"A powered exoskeleton that lets people with spinal cord injuries stand and walk.",
+  signals:[["Regulatory","FDA cleared for clinical and personal use"],["Buzz","Its launch video has 40 million views"],["Price","$95,000 per device"],["Payment","Medicare covers personal units, but only for a narrow group of patients after a long approval process"]],
+  hidden:[["commercial","Sales","Rehab centers bought 1 or 2 units each and stopped"],["clinical","Use","Most owners wear it less than an hour a week"]],
+  key:"A tiny eligible market and low daily use",herring:"A viral demo and Medicare coverage",killer:"low use",
+  lesson:"Coverage is not demand. A $95,000 device that a narrow group qualifies for, and owners wear an hour a week, can't support a Series B valuation however good the video is."},
+ {name:"Waitroom Media",inspired:"Inspired by Outcome Health: founders convicted of fraud in 2023.",sector:"Health media",stage:"Series C",check:100,post:1500,q:.05,
+  pitch:"Touchscreen ads in exam rooms, sold to pharma brands as point-of-care marketing.",
+  signals:[["Revenue","$140M revenue, doubling every year"],["Customers","All of the top 20 pharma companies advertise"],["Metrics","Ad impressions are self-reported by the company"],["Board","Celebrity and political investors on the cap table"]],
+  hidden:[["commercial","Audit","An outside audit found many screens were never installed"],["team","Culture","Sales reps paid on bookings with no delivery check"]],
+  key:"Self-reported metrics",herring:"Blue-chip customers",killer:"fraud",
+  lesson:"When a company grades its own homework, verify it. Advertisers paying doesn't prove the ads ran."},
+ {name:"Kiosko Care",inspired:"Inspired by HealthSpot's telehealth kiosks: shut down in 2016.",sector:"Retail clinic",stage:"Seed",check:15,post:40,q:.08,
+  pitch:"Telehealth booths in grocery stores with a built-in stethoscope, scale and blood pressure cuff.",
+  signals:[["Partner","Signed with a 300-store grocery chain"],["Capex","$18,000 per booth"],["Usage","3 visits per booth per day in pilots"],["Pricing","$59 per visit, cash"]],
+  hidden:[["commercial","Breakeven","Each booth needs 9 visits a day to break even"],["clinical","Scope","Most visits end in a referral to an in-person clinic"]],
+  key:"Three visits a day",herring:"A big retail partner",killer:"low utilization",
+  lesson:"Capital-heavy care lives on utilization. Do the per-unit math first: a booth that needs 9 visits and gets 3 loses money in every store you add."},
+ {name:"Ancestrix",inspired:"Inspired by 23andMe: public via SPAC in 2021; bankrupt in 2025.",sector:"Consumer genomics",stage:"Series C",check:100,post:3500,q:.1,
+  pitch:"Direct-to-consumer DNA tests with ancestry and health reports, plus drug discovery from the customer database.",
+  signals:[["Brand","14 million customers and a household name"],["Behavior","Most customers buy once and never return"],["Pharma","Drug discovery partnership with a large pharma company"],["Price","$3.5B post-money"]],
+  hidden:[["commercial","Revenue","Kit sales falling 20% a year"],["clinical","Pipeline","No drug candidate past Phase 1"]],
+  key:"A one-time purchase with no repeat",herring:"Brand and customer count",killer:"no repeat revenue",
+  lesson:"Customer count is not a business model. A product people buy once needs a second act, and drug discovery is a decade-long bet."},
+ {name:"Cerevo Health",inspired:"Inspired by Cerebral: settled with the Justice Department in 2024 over controlled substance prescribing.",sector:"Telehealth",stage:"Series B",check:70,post:1200,q:.1,hot:true,
+  pitch:"Online mental health subscriptions with fast diagnosis and prescriptions, including ADHD medication.",
+  signals:[["Growth","Subscribers up 5x in a year"],["Marketing","Most growth comes from heavy social media ad spend"],["Clinicians","Clinicians report pressure to keep visits short"],["Rules","Relies on pandemic-era rules for prescribing controlled drugs online"]],
+  hidden:[["clinical","Prescribing","Stimulant prescribing rate far above in-person practices"],["team","Compliance","Head of compliance left after 4 months"]],
+  key:"Growth riding on a temporary rule",herring:"5x subscriber growth",killer:"regulators",
+  lesson:"Growth built on a regulatory exception lasts as long as the exception. When clinicians feel pushed on throughput, patient safety risk becomes your risk."},
+ {name:"Brightstride",inspired:"Composite. The evidence it cites is real: randomized trials of workplace wellness programs published in 2019 found no significant cost savings.",sector:"Employer wellness",stage:"Series A",check:40,post:180,q:.12,
+  pitch:"Workplace wellness programs with biometric screenings, step challenges and health coaching.",
+  signals:[["Customers","Sold to 200 employers"],["ROI","Claims a 3:1 return from a study it paid for"],["Usage","12% of employees participate"],["Contracts","Renewed year to year"]],
+  hidden:[["clinical","Evidence","Independent randomized trials of similar programs found no cost savings"],["commercial","Renewals","Renewal rate fell from 90% to 70% in two years"]],
+  key:"ROI proven only by its own study",herring:"200 employer logos",killer:"no proven savings",
+  lesson:"Randomized studies of workplace wellness have found little effect on costs. When the only proof is a study the vendor funded, treat the ROI as marketing."}
+];
+const DEMO=[
+ {t:"Prior auth automation for orthopedic clinics; 40 paying practices",q:.82},
+ {t:"Remote cardiac rehab under existing billing codes; 3 health system contracts",q:.76},
+ {t:"Pharmacy compounding robot; two hospital purchase orders signed",q:.6},
+ {t:"AI that appeals denied claims, paid a share of recovered revenue; 12 hospitals",q:.75},
+ {t:"Scheduling software for home infusion nurses; 30 agencies paying monthly",q:.66},
+ {t:"Robot that sorts surgical instruments in sterile processing; 2 paid pilots",q:.62},
+ {t:"Nurse-run chronic care management, billed to Medicare; already profitable",q:.7},
+ {t:"Uber for traveling nurses, settled on the blockchain",q:.04},
+ {t:"A wrist wearable that detects every disease",q:.03},
+ {t:"A chatbot wrapper for patient intake forms",q:.2},
+ {t:"A metaverse waiting room for clinics",q:.03},
+ {t:"Longevity supplement subscription with an AI coach",q:.12},
+ {t:"Ad-supported social network for doctors; 500 users",q:.15},
+ {t:"A hospital robot that tells patients jokes",q:.08}
+];
+const BGS=[
+ {id:"banker",name:"Ex-banker",perk:"Starts with LP trust at 75. No diligence shortcuts.",mult:1,lp:75,free:null},
+ {id:"operator",name:"Ex-operator",perk:"Founder and commercial diligence is free on every deal.",mult:2,lp:60,free:["team","commercial"]},
+ {id:"physician",name:"Ex-physician",perk:"Clinical diligence is free on every deal.",mult:3,lp:60,free:["clinical"]}
+];
+const PARTNER_POOL=["Priya","Marcus","Elena","Tomás","June","Kofi","Sasha","Devin"];
+const CAT_COST={clinical:"Call a clinician",team:"Run references",commercial:"Check the numbers"};
+
+// ---------- Glossary ----------
+const GL={
+ dry:{t:"Dry powder",d:"Committed capital you haven't invested yet. Once it's gone, you can't write new checks or defend winners in follow-on rounds."},
+ hours:{t:"Partner hours",d:"Your team's time. Diligence costs hours, and each partner adds 2 hours at the start of every year."},
+ rep:{t:"Reputation",d:"How founders see you. Below 55, hot rounds cut your allocation in half. Backing winners raises it; missing obvious winners lowers it."},
+ lptrust:{t:"LP trust",d:"How confident your investors are in you. Losses drain it, wins rebuild it. If it hits zero while you're still investing, your LPs stop funding the fund."},
+ lp:{t:"LP (limited partner)",d:"The investors in a venture fund: pensions, endowments, foundations, family offices. They commit capital and the fund draws it down over time."},
+ check:{t:"Check size",d:"How much you invest in this round. All-in triples it."},
+ post:{t:"Post-money valuation",d:"What the company is worth right after this round, including the new money.",ex:"$40M check / $200M post = 20% ownership"},
+ own:{t:"Ownership",d:"Your share of the company after this round: check divided by post-money. Later rounds will dilute it.",ex:"$15M / $60M post = 25%"},
+ prorata:{t:"Pro-rata",d:"Your right to invest in the next round enough to keep your ownership percentage. Skipping it means you get diluted."},
+ bridge:{t:"Bridge note",d:"A short-term loan from existing investors, usually convertible into shares, that buys runway to the next milestone. Cheap if the company recovers, wasted if it doesn't."},
+ dilution:{t:"Dilution",d:"When a company issues new shares, everyone's existing percentage shrinks. Your shares are worth the same; you just own less of the company.",ex:"20% stake, new round sells 25% of the company: you now own 15%"},
+ tvpi:{t:"TVPI (net)",d:"Total value to paid-in capital: everything LPs got back divided by everything they paid in, including fees, after carry. The headline number LPs judge you on.",ex:"$2.4B net to LPs / $1.0B paid in = 2.4x"},
+ dpi:{t:"DPI",d:"Distributions to paid-in: cash actually returned to LPs divided by what they paid in. Early on it's near zero. At the end of a fund, every holding has exited, so DPI equals TVPI."},
+ moic:{t:"Gross MOIC",d:"Multiple on invested capital: what your investments returned divided by what you invested, before fees and carry. Always higher than net TVPI."},
+ irr:{t:"IRR",d:"The annual return that accounts for when cash moved. A 3x in 4 years beats a 3x in 9 years. Calculated here from each year's LP cash flows, net of fees and carry."},
+ carry:{t:"Carried interest (carry)",d:"The fund managers' share of profits, here 20%. Paid only after LPs get back everything they put in, including fees.",ex:"$2.0B returned on $1.0B paid in: carry = 20% x $1.0B profit = $200M"},
+ fee:{t:"Management fee",d:"An annual fee that pays salaries and operations. Here 2% of $1B a year for 5 years, then 1% for 5 years: $150M total, charged whether or not you invest."},
+ deploy:{t:"Deployment",d:"How much of your investable capital you actually put to work. LPs pay fees on the whole fund, so sitting on cash drags returns. Score is reduced if you deploy under 70%."},
+ fundret:{t:"Fund returner",d:"A single exit that pays back the entire fund. Venture returns follow a power law: a fund's best deal often returns more than all the others combined."},
+ hot:{t:"Hot round",d:"An oversubscribed round where founders choose investors. Firms with weak reputations get a smaller allocation."},
+ stage:{t:"Funding stages",d:"Seed proves the product, Series A proves the market, Series B scales a working model, Series C and later fund expansion. Later rounds are safer but pay smaller multiples."},
+ k510:{t:"510(k)",d:"The most common FDA path for devices: show the device is substantially equivalent to one already on the market (the predicate). Faster and cheaper than other paths."},
+ predicate:{t:"Predicate device",d:"An already-legal device a new product is compared against in a 510(k). A clear predicate makes clearance more predictable."},
+ denovo:{t:"De Novo",d:"FDA path for novel, low-to-moderate risk devices with no predicate. It creates a new device category, which later competitors can then use as their predicate."},
+ cds:{t:"Non-device clinical software",d:"Some software that supports clinicians, where the clinician can review the basis for its output, falls outside FDA device rules. No clearance needed, which speeds launch."},
+ cpt:{t:"CPT code",d:"Billing codes that describe medical services. Without a code that fits, providers struggle to get paid for using your product, however good it is."},
+ cms:{t:"CMS",d:"Centers for Medicare & Medicaid Services, the federal agency that runs Medicare. Its payment rules shape what gets adopted across US healthcare."},
+ mac:{t:"Medicare contractor",d:"Private companies that process Medicare claims by region. Some set local payment rates, so one contractor's decision can reprice a product."},
+ ncd:{t:"National coverage decision",d:"A Medicare decision that a service is covered nationwide. It removes payer-by-payer fights."},
+ uspstf:{t:"USPSTF",d:"US Preventive Services Task Force. Under the ACA, most private plans must cover its A and B rated screenings with no cost to the patient."},
+ ma:{t:"Medicare Advantage",d:"Private plans that take a fixed monthly payment per Medicare member and cover their care. Over half of Medicare beneficiaries are in one."},
+ risk:{t:"Full risk (capitation)",d:"Getting a fixed payment per patient and covering all their care costs. You profit if care costs less than the payment and lose if it costs more."},
+ mlr:{t:"Medical loss ratio",d:"The share of premium spent on medical care. Above 100%, you pay out more in care than you collect.",ex:"$1,120 of care per $1,000 premium = 112%"},
+ nrr:{t:"Net revenue retention",d:"This year's revenue from last year's customers, divided by last year's revenue from them. Counts expansion, downgrades and churn. Strong enterprise software runs above 110%."},
+ churn:{t:"Churn",d:"Customers who cancel or don't renew. High churn means growth has to replace lost revenue before it adds any."},
+ auc:{t:"AUC",d:"A measure of how well a model separates positive from negative cases: 0.5 is a coin flip, 1.0 is perfect. Easy to inflate on historical data."},
+ retro:{t:"Retrospective vs prospective",d:"Retrospective studies test on past data. Prospective studies test on new patients going forward, in real workflows. Models often score much lower prospectively."},
+ cac:{t:"CAC payback",d:"Months of gross profit from a customer needed to repay what it cost to acquire them. Under 12 months is strong for consumer subscriptions."},
+ gm:{t:"Gross margin",d:"Revenue minus the direct cost of delivering it, as a percentage of revenue. Software often runs 70-80%+; hardware much lower."},
+ ehr:{t:"EHR",d:"Electronic health record, like Epic or Oracle Health. Being embedded in the EHR is a distribution advantage; competing with the EHR's free features is a threat."},
+ spac:{t:"SPAC",d:"A blank-check company that takes a private company public by merger. Many health tech SPACs in 2020-21 later fell sharply."},
+ cmio:{t:"CMIO",d:"Chief medical information officer: the physician executive who owns clinical software decisions at a health system."},
+ cno:{t:"CNO",d:"Chief nursing officer: owns nursing staff and budget, often the largest labor line at a hospital."},
+ pa:{t:"Prior authorization",d:"Insurer approval required before a drug or procedure is covered. Slow and manual, it delays care and costs providers and drug makers money."},
+ compound:{t:"Compounded medications",d:"Drugs mixed by pharmacies rather than mass-manufactured. Useful for shortages and custom doses, but FDA rules can tighten and cut off supply."},
+ controlled:{t:"Controlled substances",d:"Drugs like ADHD stimulants regulated by the DEA. Pandemic-era rules let them be prescribed by video without an in-person visit."},
+ netadq:{t:"Network adequacy",d:"Rules requiring insurers to have enough in-network providers of each type within reach of members. Behavioral health is where most plans fall short."},
+ razor:{t:"Razor-and-blades",d:"Sell the device at low margin and earn recurring revenue on consumables used with it."},
+ strategic:{t:"Strategic acquirer",d:"A company buying a startup for its product or market, like a medtech or pharma company, rather than a financial buyer."},
+ insiders:{t:"Insiders",d:"Existing investors. An insider-led round with no new outside lead can mean outsiders passed."},
+ stepup:{t:"Step-up",d:"How much higher the new round's price per share is than the last one. A big step-up marks your stake up on paper."},
+ markup:{t:"Markups",d:"Raising the paper value of a holding after a higher-priced round. Markups lift TVPI but not DPI until there's an exit."},
+ take:{t:"Take rate",d:"The share of each transaction a marketplace keeps as revenue."},
+ capex:{t:"Capex",d:"Capital expenditure: up-front spending on physical assets like booths, robots or machines."},
+ jcurve:{t:"J-curve",d:"The shape of a venture fund's value over time. It dips early as fees are paid and weak companies fail fast, then climbs as winners exit years later. The dot shows where your fund is."},
+ denom:{t:"Denominator effect",d:"When public markets fall, an LP's private holdings become a bigger share of its total portfolio, pushing it over its target. LPs then cut new venture commitments, even if your fund is doing fine."},
+ markdown:{t:"Markdown",d:"Cutting the paper value of a holding, often after a down round at a lower price. It lowers TVPI before any exit happens."},
+ reserves:{t:"Reserves",d:"Capital a fund holds back to invest in its existing companies' later rounds. Too little and you get diluted out of your winners; too much and you wasted dry powder on losers."},
+ phase1:{t:"Phase 1",d:"The first human trial of a drug, testing safety in a small group. Most drugs that enter Phase 1 never reach approval."}
+};
+const ALIASES=[
+ ["lptrust","LP trust"],["dry","dry powder"],["tvpi","TVPI"],["dpi","DPI"],["moic","MOIC"],["irr","IRR"],
+ ["carry","carried interest|carry"],["fee","management fees?"],["lp","limited partners?|LPs?"],
+ ["post","post-money"],["prorata","pro-rata"],["bridge","bridge note"],["dilution","dilut(?:ed|ion|es)"],
+ ["fundret","fund returner|returns? the fund"],["hot","hot rounds?"],["stage","Series [ABC]|seed"],
+ ["k510","510\\(k\\)"],["predicate","predicate(?: device)?"],["denovo","De Novo"],["cds","non-device clinical software"],
+ ["cpt","CPT codes?|billing codes?"],["cms","CMS"],["mac","(?:regional|Medicare) contractor"],["ncd","national coverage decision"],
+ ["uspstf","USPSTF"],["ma","Medicare Advantage"],["risk","full financial risk|capitation"],["mlr","(?:medical )?loss ratio"],
+ ["nrr","net revenue retention"],["churn","churn(?:ed)?"],["auc","AUC"],["retro","retrospective|prospective"],
+ ["cac","CAC payback"],["gm","gross margin"],["ehr","EHRs?"],["spac","SPAC"],["cmio","CMIO"],["cno","CNO"],
+ ["pa","prior auth(?:orizations?)?"],["compound","compounded medications"],["controlled","controlled drugs"],
+ ["netadq","network adequacy"],["razor","razor-and-blades"],["strategic","strategic acquirer"],["insiders","insiders"],
+ ["stepup","step-up"],["denom","denominator effect"],["markdown","markdown|down round"],["reserves","reserves"],["markup","markups"],["take","take rate"],["capex","capex"],["phase1","Phase 1"]
+].map(([k,p])=>[k,new RegExp("(?<![\\w-])(?:"+p+")(?![\\w-])","i")]);
+let seen=new Set();
+function term(k,label){seen.add(k);return `<span class="term" tabindex="0" role="button" aria-expanded="false" data-k="${k}">${label}</span>`}
+function gl(text){
+  let parts=[{s:text}];
+  for(const [k,re] of ALIASES){
+    if(seen.has(k))continue;
+    for(let i=0;i<parts.length;i++){
+      const p=parts[i];if(p.w)continue;const m=p.s.match(re);if(!m)continue;
+      const a=p.s.slice(0,m.index),b=p.s.slice(m.index+m[0].length);
+      parts.splice(i,1,{s:a},{s:term(k,m[0]),w:1},{s:b});seen.add(k);break;
+    }
+  }
+  return parts.map(p=>p.s).join("");
+}
+
+// ---------- Rotation ----------
+function shuffle(a){return a.map(x=>[Math.random(),x]).sort((p,q)=>p[0]-q[0]).map(x=>x[1])}
+function recent(){try{return new Set(JSON.parse(localStorage.getItem("vmd-recent")||"[]"))}catch(e){return new Set()}}
+function pickFrom(pool,n,rec){return shuffle(pool).sort((a,b)=>(rec.has(a.name||a.t)?1:0)-(rec.has(b.name||b.t)?1:0)).slice(0,n)}
+function pickDeals(){
+  const rec=recent();const good=DEALS.filter(d=>d.q>=.5),bad=DEALS.filter(d=>d.q<.5);
+  const k=5+Math.floor(Math.random()*3); // 5 to 7 strong deals per run
+  const set=shuffle([...pickFrom(good,k,rec),...pickFrom(bad,12-k,rec)]);
+  const dg=pickFrom(DEMO.filter(x=>x.q>=.5),3,rec),db=pickFrom(DEMO.filter(x=>x.q<.5),3,rec);
+  try{localStorage.setItem("vmd-recent",JSON.stringify([...set.map(d=>d.name),...dg.map(x=>x.t),...db.map(x=>x.t)]))}catch(e){}
+  return {deals:set,demo:shuffle([...dg,...db])};
+}
+
+// ---------- Fund math ----------
+// Annual LP cash flows: LPs pay in each year's checks plus fees, and receive exits.
+// European waterfall, simplified (no GP catch-up): 100% of exits go to LPs until they get back all paid-in capital, then 80/20.
+function calcFund(holdings,demo){
+  const inv=Array(11).fill(0),dist=Array(11).fill(0);
+  for(const h of holdings){
+    if(h.mode==="pass")continue;
+    inv[h.yr]+=h.amt;if(h.follow)inv[h.fyr]+=h.follow;
+    if(h.done)dist[Math.min(10,h.yr+HOLD[h.d.tier])]+=h.pay;
+  }
+  for(const x of demo){inv[2]+=5;dist[Math.min(10,2+HOLD[x.tier])]+=5*LAD.Seed[x.tier]}
+  const invested=inv.reduce((a,b)=>a+b),gross=dist.reduce((a,b)=>a+b),fees=FEES.reduce((a,b)=>a+b);
+  const paidIn=invested+fees,profit=gross-paidIn,carry=CARRY*Math.max(0,profit),net=gross-carry;
+  let cum=0;const flows=[];
+  for(let y=1;y<=10;y++){const d=dist[y],first=Math.min(d,Math.max(0,paidIn-cum)),toLP=first+(d-first)*(1-CARRY);cum+=toLP;flows.push(toLP-inv[y]-FEES[y])}
+  const npv=r=>flows.reduce((a,f,i)=>a+f/Math.pow(1+r,i),0);
+  // Fees keep flowing after exits, so cash flows can change sign more than once.
+  // Scan for the sign change closest to 0% and refine it by bisection.
+  let irr=null;
+  if(gross<=0)irr=-1;
+  else{let br=null;const grid=[];for(let r=-.95;r<=3;r+=.005)grid.push(r);
+    for(let i=1;i<grid.length;i++){const a=npv(grid[i-1]),b=npv(grid[i]);if(a===0){br=[grid[i-1],grid[i-1]];}
+      if(a*b<0){const c=[grid[i-1],grid[i]];if(!br||Math.abs(c[0])<Math.abs(br[0]))br=c}}
+    if(br){let [lo,hi]=br;const s=Math.sign(npv(lo));for(let i=0;i<60;i++){const m=(lo+hi)/2;Math.sign(npv(m))===s?lo=m:hi=m}irr=(lo+hi)/2}}
+  const tvpi=paidIn?net/paidIn:0;
+  const deployFactor=Math.min(1,invested/(INVESTABLE*.7));
+  return {invested,gross,fees,paidIn,carry,net,tvpi,dpi:tvpi,moic:invested?gross/invested:0,irr,deployFactor,flows,dist};
+}
+
+// ---------- State ----------
+let G=null;
+const $=s=>document.querySelector(s);
+let app;
+function fmt(m){const neg=m<0;m=Math.abs(m);let s;if(m>=1000)s="$"+(m/1000).toFixed(2)+"B";else if(m<10&&m%1)s="$"+m.toFixed(1)+"M";else s="$"+Math.round(m)+"M";return (neg?"−":"")+s}
+function clamp(v){return Math.max(0,Math.min(100,v))}
+function best(){try{return +localStorage.getItem("vmd-best")||0}catch(e){return 0}}
+function setBest(v){try{localStorage.setItem("vmd-best",v)}catch(e){}}
+
+function newGame(bg,fund){
+  lastF=0;
+  const p=pickDeals();
+  G={bg,fund,powder:INVESTABLE,hours:4,rep:50,lp:bg.lp,idx:0,queue:[],holdings:[],demo:[],over:null,
+     partners:shuffle(PARTNER_POOL).slice(0,3),demoPool:p.demo,
+     deals:p.deals.map(d=>({...d,tier:roll(d.q),open:{}}))};
+}
+const year=()=>Math.min(4,1+Math.floor(G.idx/3));
+
+// ---------- Shared pieces ----------
+// Fund-life progress drawn as the classic J-curve: value dips while fees and early write-offs land, then climbs with exits.
+const JPATH="M4,14 C40,34 80,38 120,30 S230,8 296,4";
+function progress(){if(G.over)return (G.idx/12)*.45;if(G.idx<12)return G.idx/12*.45;const n=G.holdings.length,d=G.holdings.filter(h=>h.done).length;return .45+.55*(n?d/n:1)}
+function jcurve(){return `<svg class="jc" viewBox="0 0 300 42" aria-label="Fund progress on the J-curve" role="img">
+<line x1="0" y1="14" x2="300" y2="14" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 3"/>
+<path d="${JPATH}" fill="none" stroke="var(--line)" stroke-width="3"/>
+<path class="jc-done" d="${JPATH}" fill="none" stroke="var(--trail)" stroke-width="3" stroke-linecap="round"/>
+<circle class="jc-dot" r="5" cx="4" cy="14" fill="var(--surface)" stroke="var(--trail)" stroke-width="3"/></svg>`}
+let lastF=0;
+function placeDot(){const path=app.querySelector(".jc-done");if(!path)return;const L=path.getTotalLength(),f=progress(),pt=path.getPointAtLength(L*f);
+  path.style.transition="none";path.style.strokeDasharray=L;path.style.strokeDashoffset=L*(1-lastF);path.getBoundingClientRect();
+  path.style.transition="";path.style.strokeDashoffset=L*(1-f);lastF=f;
+  const c=app.querySelector(".jc-dot");c.setAttribute("cx",pt.x);c.setAttribute("cy",pt.y)}
+function hud(){
+  const bar=v=>`<div class="bar"><i class="${v<30?"low":""}" style="width:${v}%"></i></div>`;
+  const status=G.over?"Wound down early":G.idx>=12?"Years 5 to 10 · Exits":`Year ${year()} of 10 · Investing`;
+  return `<div class="hud">
+   <div class="stat"><span>${term("dry","Dry powder")}</span><b>${fmt(G.powder)}</b></div>
+   <div class="stat"><span>${term("hours","Partner hrs")}</span><b>${G.hours}</b></div>
+   <div class="stat"><span>${term("rep","Reputation")}</span><b>${G.rep}</b>${bar(G.rep)}</div>
+   <div class="stat"><span>${term("lptrust","LP trust")}</span><b>${G.lp}</b>${bar(G.lp)}</div></div>
+   <div class="trail">${jcurve()}
+   <div class="stops"><span>${term("jcurve","J-curve")}</span><span class="here">${status}</span><span>Year 10</span></div></div>`;
+}
+function show(html){hideTip();app.innerHTML=html;seen=new Set();placeDot();const f=app.querySelector("[data-focus]");if(f)f.focus({preventScroll:true});window.scrollTo(0,0)}
+function next(){
+  if(G.over)return finale();
+  if(G.queue.length)return G.queue.shift()();
+  if(G.idx<12)return dealScreen();
+  return harvest();
+}
+
+// ---------- Tooltips ----------
+let tip,pinned=null;
+function showTip(el){
+  const g=GL[el.dataset.k];if(!g)return;
+  tip.innerHTML=`<b>${g.t}</b>${g.d}${g.ex?`<span class="ex">${g.ex}</span>`:""}`;tip.hidden=false;
+  const r=el.getBoundingClientRect(),w=tip.offsetWidth,h=tip.offsetHeight,vw=document.documentElement.clientWidth,vh=window.innerHeight;
+  let x=Math.max(12,Math.min(vw-w-12,r.left+r.width/2-w/2)),y=r.bottom+8;if(y+h>vh-12)y=Math.max(12,r.top-h-8);
+  tip.style.left=x+"px";tip.style.top=y+"px";
+  document.querySelectorAll('.term[aria-expanded="true"]').forEach(t=>t.setAttribute("aria-expanded","false"));el.setAttribute("aria-expanded","true");
+}
+function hideTip(){if(!tip)return;tip.hidden=true;pinned=null;document.querySelectorAll('.term[aria-expanded="true"]').forEach(t=>t.setAttribute("aria-expanded","false"))}
+function initTips(){
+  tip=document.createElement("div");tip.id="tip";tip.setAttribute("role","tooltip");tip.hidden=true;document.body.appendChild(tip);
+  document.addEventListener("pointerover",e=>{if(e.pointerType!=="mouse")return;const t=e.target.closest(".term");if(t&&!pinned)showTip(t)});
+  document.addEventListener("pointerout",e=>{if(e.pointerType!=="mouse")return;const t=e.target.closest(".term");if(t&&!pinned)hideTip()});
+  document.addEventListener("click",e=>{const t=e.target.closest(".term");
+    if(t){e.preventDefault();e.stopPropagation();if(pinned===t)hideTip();else{showTip(t);pinned=t}return}
+    if(pinned)hideTip()},true);
+  document.addEventListener("keydown",e=>{const t=document.activeElement&&document.activeElement.closest&&document.activeElement.closest(".term");
+    if(e.key==="Escape")hideTip();
+    else if(t&&(e.key==="Enter"||e.key===" ")){e.preventDefault();e.stopPropagation();if(pinned===t)hideTip();else{showTip(t);pinned=t}}},true);
+  document.addEventListener("focusin",e=>{const t=e.target.closest&&e.target.closest(".term");if(t&&!pinned)showTip(t)});
+  document.addEventListener("focusout",e=>{const t=e.target.closest&&e.target.closest(".term");if(t&&!pinned)hideTip()});
+  window.addEventListener("scroll",()=>{if(tip.hidden)return;const t=pinned||document.querySelector('.term[aria-expanded="true"]');if(t&&t.isConnected){const pp=pinned;showTip(t);pinned=pp}else hideTip()},{passive:true});
+}
+
+// ---------- Title & setup ----------
+function title(){
+  const b=best();
+  show(`<section class="title-art enter">
+   <p class="eyebrow">A healthcare venture game</p>
+   <h1>Venture<em>MD</em></h1>
+   <p class="pitch">It's 2027. You have a $1B healthcare fund, three partners and a ten-year clock. Twelve founders will pitch you over four years. Ten years from now, your LPs will want their money back.</p>
+   <div class="card"><h3>How it works</h3>
+   <ul class="rules">
+    <li>Each deal: <b>pass</b>, <b>invest</b> a standard check, or go <b>all-in</b> with 3x.</li>
+    <li>Spend partner hours on diligence to uncover hidden signals.</li>
+    <li>Outcomes arrive a few deals later, with a post-mortem on the signal that mattered.</li>
+    <li>If ${term("lptrust","LP trust")} hits zero, your LPs stop meeting capital calls and the fund winds down early.</li>
+    <li>Every run deals 12 of 24 companies, so every new fund sees new founders.</li>
+    <li>Companies are fictional. Most are inspired by public healthcare stories, revealed after each outcome; all figures are invented for teaching.</li></ul>
+   <p class="glossary-hint">Dotted terms are defined. Hover or tap them.</p></div>
+   ${b?`<p class="muted num">Best score on this device: ${b.toLocaleString()}</p>`:""}
+   <button class="primary" id="go" data-focus>Start Fund I</button></section>`);
+  $("#go").onclick=setup;
+}
+function setup(){
+  let pick=BGS[2];
+  const render=()=>{show(`<section class="choice enter">
+   <p class="eyebrow">Fund close</p><h2>Who is your managing partner?</h2>
+   <p class="muted">Pick your background. Easier starts score less, harder starts score more.</p>
+   ${BGS.map(b=>`<button class="opt" data-id="${b.id}" aria-pressed="${b===pick}"><span class="row"><strong>${b.name}</strong><small>Score x${b.mult}</small></span><span>${b.perk}</span></button>`).join("")}
+   <label class="field" for="fund">Name your fund<input type="text" id="fund" value="Bedside Ventures I" maxlength="40"></label>
+   <button class="primary" id="go">Close the fund · $1B committed</button>
+   <p class="muted" style="font-size:13px">${gl("Management fees")} take $150M over the fund's ten years, so you have $850M to invest across twelve deals, follow-ons and Demo Day.</p></section>`);
+   app.querySelectorAll(".opt").forEach(o=>o.onclick=()=>{const v=$("#fund").value;pick=BGS.find(b=>b.id===o.dataset.id);render();$("#fund").value=v});
+   $("#go").onclick=()=>{newGame(pick,($("#fund").value||"Fund I").trim());next()};
+  };render();
+}
+
+// ---------- Deal ----------
+function dealScreen(){
+  const d=G.deals[G.idx];
+  const free=G.bg.free||[];
+  d.hidden.forEach((h,i)=>{if(free.includes(h[0]))d.open[i]=true});
+  const own=Math.round(d.check/d.post*1000)/10;
+  const cut=d.hot&&G.rep<55;
+  const amt=m=>{let a=m==="allin"?d.check*3:d.check;return cut?a/2:a};
+  const hid=d.hidden.map((h,i)=>d.open[i]
+    ?`<div class="reveal"><span class="k">${h[1]}</span>${gl(h[2])}</div>`
+    :`<div class="locked"><span><span class="k">${h[1]}</span><br><span class="muted">Hidden</span></span><button class="btn-sm" data-dd="${i}" ${G.hours<1?"disabled":""}>${CAT_COST[h[0]]} · 1 hr</button></div>`).join("");
+  show(`${hud()}
+  <article class="card deal enter" id="card">
+   <div class="stamp" id="stamp"></div>
+   <div class="pills"><span class="pill">Deal ${G.idx+1} of 12</span><span class="pill">${term("stage",d.stage)}</span><span class="pill">${d.sector}</span>${d.hot?`<span class="pill hot">${term("hot","Hot round")}</span>`:""}</div>
+   <h2>${d.name}</h2><p class="pitch">${gl(d.pitch)}</p>
+   <dl class="terms"><div><dt>${term("check","Check")}</dt><dd>${fmt(d.check)}</dd></div><div><dt>All-in</dt><dd>${fmt(d.check*3)}</dd></div><div><dt>${term("post","Post")}</dt><dd>${fmt(d.post)}</dd></div><div><dt>${term("own","Owns")}</dt><dd>${own}%</dd></div></dl>
+   <ul class="signals">${d.signals.map(s=>`<li><span class="k">${s[0]}</span><span>${gl(s[1])}</span></li>`).join("")}</ul>
+   <div class="dd-head"><span class="eyebrow">Diligence</span><span class="muted" style="font-size:12px">${G.hours} partner hrs left</span></div>
+   ${hid}
+   ${cut?`<p class="note">Hot round: with reputation under 55, you'll be cut back to half your allocation.</p>`:""}
+  </article>
+  <div class="actions">
+   <button class="act pass" data-m="pass"><strong>Pass</strong><small>$0</small></button>
+   <button class="act inv" data-m="invest" ${amt("invest")>G.powder?"disabled":""}><strong>Invest</strong><small>${fmt(amt("invest"))}</small></button>
+   <button class="act all" data-m="allin" ${amt("allin")>G.powder?"disabled":""}><strong>All-in</strong><small>${fmt(amt("allin"))}</small></button>
+  </div>
+  <p class="hint">Swipe left to pass, right to invest, up to go all-in. Arrow keys work too.</p>`);
+  app.querySelectorAll("[data-dd]").forEach(b=>b.onclick=()=>{G.hours--;d.open[b.dataset.dd]=true;dealScreen()});
+  app.querySelectorAll(".act").forEach(b=>b.onclick=()=>decide(b.dataset.m,amt));
+  swipe(amt);
+}
+function swipe(amt){
+  const c=$("#card"),st=$("#stamp");let sx=0,sy=0,dx=0,dy=0,on=false;
+  const mode=()=>dx<-90?"pass":dx>90?"invest":dy<-90?"allin":null;
+  c.addEventListener("pointerdown",e=>{if(e.target.closest("button,.term"))return;on=true;sx=e.clientX;sy=e.clientY;c.classList.add("dragging");c.setPointerCapture(e.pointerId)});
+  c.addEventListener("pointermove",e=>{if(!on)return;dx=e.clientX-sx;dy=e.clientY-sy;c.style.transform=`translate(${dx}px,${Math.min(0,dy)}px) rotate(${dx/25}deg)`;
+    const m=mode();const map={pass:["PASS","var(--stop)"],invest:["INVEST","var(--go)"],allin:["ALL-IN","var(--trail)"]};
+    if(m){st.textContent=map[m][0];st.style.color=st.style.borderColor=map[m][1];st.style.opacity=1}else st.style.opacity=0});
+  const end=()=>{if(!on)return;on=false;c.classList.remove("dragging");const m=mode();
+    if(m&&(m==="pass"||amt(m)<=G.powder)){decide(m,amt)}else{c.style.transform="";st.style.opacity=0}dx=dy=0};
+  c.addEventListener("pointerup",end);c.addEventListener("pointercancel",end);
+}
+function decide(mode,amt){
+  const d=G.deals[G.idx];const a=mode==="pass"?0:amt(mode);
+  G.powder-=a;
+  G.holdings.push({d,mode,amt:a,yr:year(),follow:0,fyr:0,fmode:null,diluted:false,done:false,pay:0});
+  const i=G.idx;G.idx++;
+  if(i>=3)G.queue.push(()=>news(G.holdings[i-3]));
+  if(Math.random()<.45)G.queue.push(event);
+  if(i===3||i===8)G.queue.push(river);
+  if(i===5)G.queue.push(demoDay);
+  if((i+1)%3===0&&i<11)G.queue.push(newYear);
+  next();
+}
+
+// ---------- Outcomes ----------
+function settle(h){
+  const m=mult(h.d);let p=h.amt*m*(h.diluted?.75:1);
+  if(h.fmode==="ford")p+=h.follow*m/2;
+  if(h.fmode==="bridge")p+=h.follow*m;
+  h.pay=p;h.done=true;
+  let lp=0,rep=0;
+  if(h.mode!=="pass"){
+    lp=[-7,-3,1,4,8,12][h.d.tier]*(h.mode==="allin"?1.6:1);
+    rep=[-3,-2,0,2,4,6][h.d.tier];
+  }else if(h.d.tier>=4)rep=-2;
+  lp=Math.round(lp);G.lp=clamp(G.lp+lp);G.rep=clamp(G.rep+rep);
+  if(G.lp<=0&&G.idx<12)G.over="lp"; // LPs can only pull out while capital is still being called
+  return {lp,rep};
+}
+function outcomeBlock(h,fx){
+  const t=TIERS[h.d.tier],m=mult(h.d);const cls=m>=4?"win":m>=1.5?"mid":"loss";
+  const put=h.amt+h.follow;
+  let line=t.line;
+  if(h.d.tier===5){line=h.mode!=="pass"&&h.pay>=1000?"became the category leader. This one exit returns the whole fund.":"became the category leader."}
+  const share=h.mode!=="pass"&&h.pay>0?` That's ${Math.round(h.pay/10)}% of the $1B fund.`:"";
+  const pos=h.mode==="pass"
+    ?`You passed. ${m>=4?"Another fund made "+m+"x.":"Good call."}`
+    :`You put in ${fmt(put)}${h.mode==="allin"?" (all-in)":""} and got back ${fmt(h.pay)}.${share}${h.diluted?" Your stake was diluted after you skipped the follow-on.":""}`;
+  const fxs=fx?[fx.lp?`LP trust ${fx.lp>0?"+":""}${fx.lp}`:"",fx.rep?`Reputation ${fx.rep>0?"+":""}${fx.rep}`:""].filter(Boolean).join(" · "):"";
+  return `<div class="outcome"><span class="mult ${cls}">${m}x</span><span class="eyebrow">${h.d.tier===5?term("fundret",t.label):t.label}</span></div>
+   <p><b>${h.d.name}</b> ${gl(line)}</p><p>${gl(pos)}</p>
+   <div class="pm"><p><b>Signal that mattered:</b> ${gl(h.d.key)}</p><p><b>Red herring:</b> ${gl(h.d.herring)}</p><p class="muted">${gl(h.d.lesson)}</p><p class="inspired">${h.d.inspired}</p></div>
+   ${fxs?`<p class="effects">${fxs}</p>`:""}`;
+}
+function news(h){
+  if(h.done)return next();
+  const fx=settle(h);
+  show(`${hud()}<article class="card enter"><p class="eyebrow">Portfolio update · Year ${year()}</p>${outcomeBlock(h,fx)}</article>
+   <button class="primary" id="go" data-focus>Next</button>`);
+  $("#go").onclick=next;
+}
+
+// ---------- Events ----------
+const EVENTS=[
+ ()=>({t:"Your biggest LP has died of the denominator effect.",b:"Public markets fell, so a state pension is suddenly overweight private markets. It is cutting new commitments and asking hard questions.",fx:()=>G.lp=clamp(G.lp-10),s:"LP trust −10"}),
+ ()=>{const p=G.partners.length>1?G.partners.pop():null;return p?{t:`${p} is spinning out.`,b:`${p} is leaving to raise a solo fund and taking two founder relationships along. Fewer partners means fewer diligence hours each year.`,fx:()=>{},s:"One fewer partner"}:{t:"A partner thought about leaving.",b:"Then remembered the carry. Crisis averted.",fx:()=>{},s:"No change"}},
+ ()=>({t:"Board meeting from hell.",b:"A portfolio CEO and her co-founder are fighting over control. Mediating eats three weeks of partner time.",fx:()=>G.hours=Math.max(0,G.hours-2),s:"Partner hours −2"}),
+ ()=>({t:"Rates got cut.",b:"Markups everywhere. Your LPs are briefly delighted.",fx:()=>G.lp=clamp(G.lp+8),s:"LP trust +8"}),
+ ()=>({t:"JPM Healthcare week.",b:"You met 40 founders in three days. Your feet hurt, but people know your name.",fx:()=>{G.hours=Math.max(0,G.hours-1);G.rep=clamp(G.rep+3)},s:"Partner hours −1 · Reputation +3"}),
+ ()=>({t:"Your reimbursement thread went viral.",b:"A long post explaining CPT codes to generalist investors gets shared across health tech.",fx:()=>G.rep=clamp(G.rep+8),s:"Reputation +8"}),
+ ()=>({t:"A co-investor cut you out.",b:"A bigger fund squeezed your allocation in a round and founders noticed.",fx:()=>G.rep=clamp(G.rep-5),s:"Reputation −5"}),
+ ()=>({t:"The LP advisory committee has questions.",b:"Specifically about the offsite in Napa.",fx:()=>G.lp=clamp(G.lp-5),s:"LP trust −5"}),
+ ()=>({t:"You hired a venture partner.",b:"An ER physician at a partner health system joins part-time to take your clinical diligence calls.",fx:()=>G.hours+=2,s:"Partner hours +2"}),
+ ()=>({t:"A founder posted at 2am.",b:"A portfolio CEO's late-night thread on why doctors resist change is trending for the wrong reasons.",fx:()=>G.rep=clamp(G.rep-6),s:"Reputation −6"}),
+ ()=>({t:"A strategic came calling.",b:"A large medtech's corporate development team wants to walk your portfolio.",fx:()=>G.lp=clamp(G.lp+5),s:"LP trust +5"}),
+ ()=>({t:"Down round.",b:"A portfolio company raised at half its last price. Your LPs saw the markdown in the quarterly report.",fx:()=>G.lp=clamp(G.lp-6),s:"LP trust −6"}),
+ ()=>({t:"A fund-of-funds wants in on Fund II.",b:"A big allocator pre-commits to your next fund after one good quarterly call.",fx:()=>G.lp=clamp(G.lp+6),s:"LP trust +6"}),
+ ()=>({t:"CMS proposed new remote monitoring codes.",b:"Your LPs read the headline and assume you predicted it.",fx:()=>{G.lp=clamp(G.lp+3);G.rep=clamp(G.rep+3)},s:"LP trust +3 · Reputation +3"})
+];
+function event(){
+  const e=EVENTS[Math.floor(Math.random()*EVENTS.length)]();e.fx();if(G.lp<=0)G.over="lp";
+  show(`${hud()}<article class="card enter"><p class="eyebrow">Meanwhile</p><h2>${e.t}</h2><p>${gl(e.b)}</p><p class="effects">${e.s}</p></article>
+   <button class="primary" id="go" data-focus>Continue</button>`);
+  $("#go").onclick=next;
+}
+function newYear(){
+  const add=G.partners.length*2;G.hours+=add;
+  show(`${hud()}<article class="card enter"><p class="eyebrow">LP annual meeting</p><h2>Year ${year()} begins</h2>
+   <p>The annual meeting is done and the LPs got their tote bags. Your partners (${G.partners.join(", ")}) clear their calendars for a new year of deals.</p><p class="effects">Partner hours +${add}</p></article>
+   <button class="primary" id="go" data-focus>Back to the pipeline</button>`);
+  $("#go").onclick=next;
+}
+
+// ---------- Follow-on round ----------
+function river(){
+  const h=[...G.holdings].reverse().find(x=>x.mode!=="pass"&&!x.done&&!x.fmode);
+  if(!h){show(`${hud()}<article class="card enter"><p class="eyebrow">Follow-on round</p><h2>A quiet quarter.</h2><p>None of your live companies is raising right now.</p></article><button class="primary" id="go" data-focus>Continue</button>`);$("#go").onclick=next;return}
+  let t=h.d.tier;if(Math.random()<.2)t=Math.max(0,Math.min(5,t+(Math.random()<.5?-1:1)));
+  const hint=t>=4?"Revenue up 3x. A top-tier lead is pricing the next round at a big step-up."
+    :t===3?"A solid year. On plan, with a couple of logos ahead of schedule."
+    :t===2?"Growth is flat. Insiders are leading the round; no outside lead yet."
+    :"Missed milestones. The CEO wants an insider bridge note to reach one more catalyst.";
+  const ford=Math.round(h.amt*.5),bridge=Math.round(h.amt*.3);
+  show(`${hud()}<article class="card enter"><p class="eyebrow">Follow-on round · ${term("reserves","Reserves")} decision</p><h2>${h.d.name} is raising again.</h2>
+   <p>${gl(hint)}</p><p class="muted" style="font-size:13px">Board updates are usually honest. Usually.</p>
+   <div class="choice">
+    <button class="opt" data-c="ford" ${ford>G.powder?"disabled":""}><span class="row"><strong>Defend your stake</strong><small>${fmt(ford)}</small></span><span>Take your ${term("prorata","pro-rata")} at the new, higher price. Because you pay more per share, new money earns half the final multiple.</span></button>
+    <button class="opt" data-c="bridge" ${bridge>G.powder?"disabled":""}><span class="row"><strong>Write the bridge</strong><small>${fmt(bridge)}</small></span><span>Write a ${term("bridge","bridge note")}. It converts at the old price, so it earns the full multiple, and a struggling company gets a 35% shot at rescue.</span></button>
+    <button class="opt" data-c="ferry"><span class="row"><strong>Let new money lead</strong><small>$0</small></span><span>Let new investors fund it. Your stake is ${term("dilution","diluted")} by 25%.</span></button>
+   </div></article>`);
+  app.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{
+    const c=b.dataset.c;
+    if(c==="ford"){h.fmode="ford";h.follow=ford;h.fyr=year();G.powder-=ford}
+    else if(c==="bridge"){h.fmode="bridge";h.follow=bridge;h.fyr=year();G.powder-=bridge;if(h.d.tier<=1&&Math.random()<.35)h.d.tier++}
+    else{h.fmode="ferry";h.diluted=true}
+    next();
+  });
+}
+
+// ---------- Demo Day ----------
+function demoDay(){
+  const picks=new Set();let left=30;
+  const list=G.demoPool;
+  show(`${hud()}<article class="card enter"><div class="dd-head"><p class="eyebrow">Demo Day · Speed round</p><span class="timer num" id="tm">30</span></div>
+   <h2>Six pitches. Thirty seconds.</h2><p>Tap up to two companies for a $5M ${term("stage","seed")} check each. No diligence, just pattern recognition.</p>
+   <div class="tiles">${list.map((x,i)=>`<button class="tile" data-i="${i}" aria-pressed="false">${x.t}</button>`).join("")}</div>
+   <button class="primary" id="go">Write the checks</button></article>`);
+  const done=()=>{clearInterval(iv);[...picks].forEach(i=>{if(G.powder>=5){G.powder-=5;G.demo.push({...list[i],tier:roll(list[i].q)})}});next()};
+  const iv=setInterval(()=>{left--;const t=$("#tm");if(t)t.textContent=left;if(left<=0)done()},1000);
+  app.querySelectorAll(".tile").forEach(b=>b.onclick=()=>{const i=+b.dataset.i;
+    if(picks.has(i))picks.delete(i);else if(picks.size<2)picks.add(i);
+    app.querySelectorAll(".tile").forEach(x=>x.setAttribute("aria-pressed",picks.has(+x.dataset.i)))});
+  $("#go").onclick=done;
+}
+
+// ---------- Harvest & finale ----------
+function harvest(){
+  const rest=G.holdings.filter(h=>!h.done);
+  if(rest.length){
+    const h=rest[0];const fx=settle(h);
+    show(`${hud()}<article class="card enter"><p class="eyebrow">Exits · Years 5 to 10 · ${rest.length} left to report</p>${outcomeBlock(h,fx)}</article>
+     <button class="primary" id="go" data-focus>${rest.length>1?"Next company":"Tally the exits"}</button>`);
+    $("#go").onclick=next;return;
+  }
+  if(G.demo.length&&!G.demoShown){
+    G.demoShown=true;
+    show(`${hud()}<article class="card enter"><p class="eyebrow">Exits · Demo Day picks</p><h2>How your Demo Day bets did</h2>
+     <div class="ledger">${G.demo.map(x=>{const t=TIERS[x.tier],m=LAD.Seed[x.tier];return `<div class="r"><span>${x.t}<small>${t.label}</small></span><span class="num">${m}x</span><span class="num">${fmt(5*m)}</span></div>`}).join("")}</div>
+     <p class="muted">At Demo Day, traction with paying customers beat big claims almost every time.</p></article>
+     <button class="primary" id="go" data-focus>See final returns</button>`);
+    $("#go").onclick=finale;return;
+  }
+  finale();
+}
+function finale(){
+  const paid=G.holdings.filter(h=>h.done);
+  const F=calcFund(G.holdings,G.demo);
+  const rating=G.over?"Wound down early":F.tvpi>=3?"Top-decile fund":F.tvpi>=2?"Top-quartile fund":F.tvpi>=1.4?"Around the median":F.tvpi>=1?"Bottom quartile":"Lost LP money";
+  const score=G.over?0:Math.round(F.tvpi*1000*G.bg.mult*F.deployFactor);
+  if(score>best())setBest(score);
+  const judged=paid.filter(h=>h.d.q>=.5||h.d.q<.3);
+  const calls=judged.filter(h=>(h.d.q>=.5&&h.mode!=="pass")||(h.d.q<.3&&h.mode==="pass")).length;
+  const inv=paid.filter(h=>h.mode!=="pass");
+  const top=inv.slice().sort((a,b)=>b.pay-a.pay)[0];
+  const worst=inv.slice().sort((a,b)=>(b.amt+b.follow-b.pay)-(a.amt+a.follow-a.pay))[0];
+  const miss=paid.filter(h=>h.mode==="pass").sort((a,b)=>mult(b.d)-mult(a.d))[0];
+  const topShare=top&&F.gross>0?Math.round(top.pay/F.gross*100):0;
+  const cause=G.over?"LP fatigue":worst&&worst.pay<worst.amt?worst.d.killer:"nothing in particular";
+  const irrTxt=F.irr===null?"n/a":F.irr<=-.99?"−100%":(F.irr*100).toFixed(1)+"%";
+  const epitaph=G.over?`Ran out of LP trust in Year ${year()}.`
+    :F.tvpi>=3?`Returned ${F.tvpi.toFixed(2)}x net.<br>Raised Fund II in eleven days.`
+    :F.tvpi>=1?`Returned ${F.tvpi.toFixed(2)}x net.<br>Died of ${cause}, but the LPs got paid.`
+    :`Returned ${F.tvpi.toFixed(2)}x net.<br>Died of ${cause}.`;
+  const card=`${G.fund} · VentureMD
+${rating} · ${F.tvpi.toFixed(2)}x net TVPI · ${irrTxt} net IRR
+Pattern calls: ${calls}/${judged.length} · Score ${score.toLocaleString()} (${G.bg.name})`;
+  G.idx=12;
+  const pct=Math.round(F.invested/INVESTABLE*100);
+  show(`${hud()}<section class="choice enter">
+   <div class="tomb"><h3>Here lies ${G.fund}</h3><p>${epitaph}</p></div>
+   <article class="card"><p class="eyebrow">Final returns to LPs</p><p class="rating">${rating}</p>
+    <div class="big">
+     <div><b class="num">${F.tvpi.toFixed(2)}x</b><span>${term("tvpi","Net TVPI")} = ${term("dpi","DPI")}</span></div>
+     <div><b class="num">${irrTxt}</b><span>${term("irr","Net IRR")}</span></div>
+     <div><b class="num">${F.moic.toFixed(2)}x</b><span>${term("moic","Gross MOIC")}</span></div>
+     <div><b class="num">${score.toLocaleString()}</b><span>Score x${G.bg.mult}</span></div></div>
+    <div class="ledger">
+     <div class="r"><span>Pattern calls<small>Backed the strong deals, passed on the weak ones</small></span><span></span><span class="num">${calls}/${judged.length}</span></div>
+     <div class="r"><span>${term("deploy","Deployment")}<small>${pct<70?"Under 70%: score reduced to "+Math.round(F.deployFactor*100)+"%":"Above the 70% floor"}</small></span><span></span><span class="num">${pct}%</span></div>
+     ${top?`<div class="r"><span>Best deal<small>${top.d.name}: ${topShare}% of all proceeds</small></span><span class="num">${mult(top.d)}x</span><span class="num">${fmt(top.pay)}</span></div>`:""}
+     ${miss&&mult(miss.d)>=4?`<div class="r"><span>The one that got away<small>${miss.d.name}: ${miss.d.key}</small></span><span class="num">${mult(miss.d)}x</span><span></span></div>`:""}
+    </div>
+    <details class="math"><summary>How the math works</summary>
+     <div class="ledger">
+      <div class="r"><span>Invested in companies</span><span></span><span class="num">${fmt(F.invested)}</span></div>
+      <div class="r"><span>${term("fee","Management fees")}<small>2% for 5 years, then 1%</small></span><span></span><span class="num">${fmt(F.fees)}</span></div>
+      <div class="r"><span>Paid in by LPs<small>Invested + fees. Uninvested capital is never called.</small></span><span></span><span class="num">${fmt(F.paidIn)}</span></div>
+      <div class="r"><span>Exit proceeds<small>Gross MOIC = proceeds / invested</small></span><span></span><span class="num">${fmt(F.gross)}</span></div>
+      <div class="r"><span>${term("carry","Carry")} to the GP<small>20% of profit above paid-in</small></span><span></span><span class="num">${fmt(F.carry)}</span></div>
+      <div class="r"><span>Net to LPs<small>Net TVPI = net / paid-in</small></span><span></span><span class="num">${fmt(F.net)}</span></div>
+     </div>
+     <p class="muted" style="font-size:13px;margin-top:8px">IRR uses yearly cash flows: checks go out the year you write them, fees run every year, and exits land 3 to 8 years later (failures surface fast, winners take longer). Carry follows a simplified European waterfall: LPs get all their money back before the GP takes 20%. Every company has exited by year 10, so DPI equals TVPI.</p>
+    </details></article>
+   <article class="card"><p class="eyebrow">Every deal in the fund</p><div class="ledger">
+    ${G.holdings.map(h=>`<div class="r"><span>${h.d.name}<small>${h.mode==="pass"?"Passed":h.mode==="allin"?"All-in":"Invested"}${h.done?" · "+TIERS[h.d.tier].label:" · Never reported"}</small></span><span class="num">${h.done?mult(h.d)+"x":"–"}</span><span class="num">${h.mode==="pass"?"–":fmt(h.pay)}</span></div>`).join("")}
+   </div></article>
+   <button class="secondary" id="copy">Copy scorecard</button><p class="copyfb" id="fb"></p>
+   <button class="primary" id="again" data-focus>Raise another fund</button></section>`);
+  $("#copy").onclick=()=>{const fb=$("#fb");
+    navigator.clipboard.writeText(card).then(()=>fb.textContent="Copied. Paste it anywhere.").catch(()=>{fb.textContent="Copy blocked here. Select the text below.";const p=document.createElement("pre");p.textContent=card;p.style.whiteSpace="pre-wrap";p.style.userSelect="all";fb.after(p)})};
+  $("#again").onclick=()=>{G=null;title()};
+}
+
+if(typeof document!=="undefined"){
+  app=$("#app");initTips();
+  document.addEventListener("keydown",e=>{
+    if(!G||!$("#card"))return;const map={ArrowLeft:"pass",ArrowRight:"invest",ArrowUp:"allin"};
+    const m=map[e.key];if(!m)return;const b=app.querySelector(`.act[data-m="${m}"]`);if(b&&!b.disabled){e.preventDefault();b.click()}
+  });
+  title();
+}
+</script>
